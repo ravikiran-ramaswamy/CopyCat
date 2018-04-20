@@ -6,11 +6,13 @@ using UnityEngine.Video;
 using UnityEngine.SceneManagement;
 using UnityEditor;
 using SimpleJSON;
+using System.IO;
+using UnityEngine.UI;
 
 public class LevelLoader : MonoBehaviour {
 
 	public bool debugMode = false;
-	static public int currLevel = 2;
+	static public int currLevel = 1;
 	public string currPhrase;
 	public TextAsset phrasesJSONFile;
 	public GameObject hintVideoRenderer;
@@ -26,7 +28,11 @@ public class LevelLoader : MonoBehaviour {
 	public GameObject nextBackgroundRenderer;
 	public GameObject hintButtonTextRenderer;
 	public GameObject signButtonTextRenderer;
-	public UnityEngine.UI.Text pointCounterText;
+    public GameObject kinectDataProviderGameObject;
+    public GameObject thoughtBubble;
+	public Text pointCounterText;
+    public GameObject signButton;
+    public GameObject areYouThereText;
 
 	private List<string> usedPhrases;
 	private List<string> unusedPhrases;
@@ -50,6 +56,10 @@ public class LevelLoader : MonoBehaviour {
 	private Vector3 nextBackgroundInitPosition;
 	private Vector3 irisInitPosition;
 	private Vector3 enemyAndItemAndStarInitPosition;
+    private KinectDataProvider kinectDataProvider;
+    private string temporaryDumpAndResultPath = @"C:\Ubuntu Image\sf\live-verifier\";
+    private SystemHealthMonitor healthMonitor;
+    private bool waitBeforeWrite;
 
 	// public event functions
 	public void PlayHint() {
@@ -60,7 +70,7 @@ public class LevelLoader : MonoBehaviour {
 			hintVideoPlayer.Play();
 		} else {
 //			hintVideoRenderer.SetActive(true);
-			if (currLevelState < LevelState.Evaluating) {
+			if (currLevelState < LevelState.Listening) {
 				hintVideoPlayer.Play();
 				hintVideoPlayer.loopPointReached += HintVideoEndReached;
 			}
@@ -80,9 +90,16 @@ public class LevelLoader : MonoBehaviour {
 //			signingVideoRenderer.SetActive(true);
 //			currLevelState = LevelState.Listening;
 //		}
-		if (currLevelState < LevelState.Evaluating) {
-			currLevelState = LevelState.Evaluating;
+		if (currLevelState < LevelState.Listening) {
+			currLevelState = LevelState.Listening;
+            kinectDataProvider.recordButtonPressed();
 		}
+        else if(currLevelState == LevelState.Listening)
+        {
+            thoughtBubble.SetActive(true);
+            currLevelState = LevelState.Evaluating;
+            waitBeforeWrite = true;
+        }
 	}
 
 	void Start () {
@@ -106,6 +123,9 @@ public class LevelLoader : MonoBehaviour {
 		}
 		this.usedPhrases = new List<string>();
 		this.phraseMetaData.Add("partsOfSpeech", json["data"][phraseLength + "-word"]["format"]);
+
+        kinectDataProvider = kinectDataProviderGameObject.GetComponent<KinectDataProvider>();
+        healthMonitor = this.GetComponent<SystemHealthMonitor>();
 
 		// load current phrase
 		this.currPhrase = PhraseChooser();
@@ -180,10 +200,35 @@ public class LevelLoader : MonoBehaviour {
 
 		// start the game off by loading the right assets
 		this.currLevelState = LevelState.Loading;
-	}
+
+        thoughtBubble.SetActive(false);
+
+        waitBeforeWrite = false;
+    }
 	
 	void Update () {
-		if (this.currLevelState == LevelState.Loading) {
+        signButton.GetComponent<Button>().interactable = healthMonitor.isSystemHealthy;
+
+        if (!healthMonitor.bodiesFound())
+        {
+            areYouThereText.transform.localScale = Vector3.MoveTowards(areYouThereText.transform.localScale, new Vector3(0.5206822f, 1.1593f, 1f), 5 * Time.deltaTime);
+            float scaleFactor = areYouThereText.transform.localScale.y / 1.1593f;
+            areYouThereText.transform.localPosition = new Vector3(areYouThereText.transform.localPosition.x, areYouThereText.transform.localPosition.y, 5.0f - scaleFactor * 1.07f);
+        }
+        else
+        {
+            areYouThereText.transform.localScale = Vector3.MoveTowards(areYouThereText.transform.localScale, new Vector3(0.5206822f, 0.0f, 1f), 5 * Time.deltaTime);
+            float scaleFactor = areYouThereText.transform.localScale.y / 1.1593f;
+            areYouThereText.transform.localPosition = new Vector3(areYouThereText.transform.localPosition.x, areYouThereText.transform.localPosition.y, 5.0f - scaleFactor * 1.07f);
+        }
+
+        if (Input.GetKeyDown(KeyCode.Mouse1))
+        {
+            this.currLevelState = LevelState.SendingMagic;
+            thoughtBubble.SetActive(false);
+        }
+
+        if (this.currLevelState == LevelState.Loading) {
 			// Load current phrase's hint video
 			VideoPlayer hintVideoPlayer = this.hintVideoRenderer.GetComponent<VideoPlayer>();
 			hintVideoPlayer.source = VideoSource.VideoClip;
@@ -299,8 +344,46 @@ public class LevelLoader : MonoBehaviour {
 
 		if (this.currLevelState == LevelState.Evaluating) {
 			if (debugMode) {
-				this.currLevelState = LevelState.SendingMagic;
-			}
+
+                if (waitBeforeWrite)
+                {
+                    kinectDataProvider.recordButtonPressed();
+                    waitBeforeWrite = false;
+                }
+
+                if (kinectDataProvider.writeCompleteCheck())
+                {
+                    try
+                    {
+                        string phraseSignDataFile = kinectDataProvider.getCurrentPhraseFileName();
+                        File.Copy(phraseSignDataFile, temporaryDumpAndResultPath + @"data\txt\" + currPhrase + ".txt");
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.Log(e.Message);
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        StreamReader reader = new StreamReader(temporaryDumpAndResultPath + "answer.txt");
+                        string result = reader.ReadToEnd();
+                        reader.Close();
+                        File.Delete(temporaryDumpAndResultPath + "answer.txt");
+                        Debug.Log(result);
+                        if (result == "YES")
+                            this.currLevelState = LevelState.SendingMagic;
+                        else
+                            this.currLevelState = LevelState.Confused;
+                        thoughtBubble.SetActive(false);
+                    }
+                    catch (Exception e)
+                    {
+                        //Debug.Log(e.Message);
+                    }
+                }
+            }
 		}
 
 		if (this.currLevelState == LevelState.Confused) {
