@@ -44,7 +44,7 @@ internal class GestureDetector : IDisposable
     /// <param name="gestureResultView">GestureResultView object to store gesture results of a single body to</param>
     public GestureDetector(KinectSensor kinectSensor)
     {
-        string prefix = @"C:\Unity Projects\CopyCat 2D Demo\Assets\Scripts\";
+        string prefix = Application.dataPath + "/Scripts/";
         
         //if (gestureResultView == null)
         //{
