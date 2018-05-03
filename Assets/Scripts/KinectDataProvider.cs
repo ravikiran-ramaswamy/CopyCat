@@ -242,6 +242,7 @@ public class KinectDataProvider : MonoBehaviour
                     {
                         startMode = true;
                         sessionNum++;
+                        mainDir = @"C:\PhraseData\" + levelLoaderObject.GetComponent<LevelLoader>().currPhrase + @"\";
                         string filePath = mainDir + "\\" + sessionNum;
                         while (System.IO.Directory.Exists(filePath))
                         {

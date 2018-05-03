@@ -11,7 +11,8 @@ using UnityEngine.UI;
 
 public class LevelLoader : MonoBehaviour {
 
-	public bool debugMode = false;
+    public int failedAttempts = 0;
+    public bool debugMode = false;
 	static public int currLevel = 1;
 	public string currPhrase;
 	public TextAsset phrasesJSONFile;
@@ -204,6 +205,8 @@ public class LevelLoader : MonoBehaviour {
         thoughtBubble.SetActive(false);
 
         waitBeforeWrite = false;
+
+        failedAttempts = 0;
     }
 	
 	void Update () {
@@ -229,7 +232,10 @@ public class LevelLoader : MonoBehaviour {
         }
 
         if (this.currLevelState == LevelState.Loading) {
-			// Load current phrase's hint video
+            // Reset number of failed attempts
+            failedAttempts = 0;
+            
+            // Load current phrase's hint video
 			VideoPlayer hintVideoPlayer = this.hintVideoRenderer.GetComponent<VideoPlayer>();
 			hintVideoPlayer.source = VideoSource.VideoClip;
 			hintVideoPlayer.isLooping = false;
@@ -372,10 +378,13 @@ public class LevelLoader : MonoBehaviour {
                         reader.Close();
                         File.Delete(temporaryDumpAndResultPath + "answer.txt");
                         Debug.Log(result);
-                        if (result == "YES")
+                        if (result == "YES" || failedAttempts >= 4)
                             this.currLevelState = LevelState.SendingMagic;
                         else
+                        {
                             this.currLevelState = LevelState.Confused;
+                            failedAttempts++;
+                        }
                         thoughtBubble.SetActive(false);
                     }
                     catch (Exception e)
